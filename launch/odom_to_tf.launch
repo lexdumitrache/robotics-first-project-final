@@ -1,0 +1,16 @@
+<launch>
+    <!-- TF from Encoder Odometry -->
+    <node name="odom_to_tf_encoders" pkg="first_project" type="odom_to_tf" output="screen" args="__name:=odom_to_tf_encoders">
+        <param name="root_frame" value="world"/>
+        <param name="child_frame" value="wheel_odom"/>
+        <remap from="input_odom" to="/encoder/odom"/>
+    </node>
+
+    <!-- TF from GPS Odometry -->
+    <node name="odom_to_tf_gps" pkg="first_project" type="odom_to_tf" output="screen" args="__name:=odom_to_tf_gps">
+        <param name="root_frame" value="world"/>
+        <param name="child_frame" value="gps_odom"/>
+        <remap from="input_odom" to="/gps/odom"/>
+    </node>
+</launch>
+

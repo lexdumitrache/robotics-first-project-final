@@ -8,6 +8,7 @@
   <!-- Example:  -->
   <!-- <maintainer email="jane.doe@example.com">Jane Doe</maintainer> -->
   <maintainer email="luigi.cardone@mail.polimi.it">Luigi</maintainer>
+  <maintainer email="alexandra.dumitrache@mail.polimi.it">Alexandra</maintainer>
 
 
   <!-- One license tag required, multiple allowed, one license per tag -->
@@ -26,7 +27,8 @@
   <!-- Authors do not have to be maintainers, but could be -->
   <!-- Example: -->
   <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
-
+  <author email="luigi.cardone@mail.polimi.it">Luigi</author>
+  <author email="alexandra.dumitrache@mail.polimi.it">Alexandra</author>
 
   <!-- The *depend tags are used to specify dependencies -->
   <!-- Dependencies can be catkin packages or system dependencies -->
