@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include <nav_msgs/Odometry.h>
+#include <geometry_msgs/Quaternion.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <cmath>
 #include <sstream>
@@ -8,11 +9,27 @@ const double b = 6356752;
 struct Vector { 
     double x, y, z; 
 };
+Vector resultPrev;
 struct GPS_point { 
     double lat, lon; 
 };
 double degreeToRad(double toConvert){
 	return toConvert * M_PI / 180;
+}
+geometry_msgs::Quaternion displacementToQuaternion(Vector vector) {
+        // Normalize displacement vector
+        double magnitude = sqrt(pow(vector.x, 2) + pow(vector.y, 2) + pow(vector.z, 2));
+        if (magnitude == 0) {
+            return geometry_msgs::Quaternion();
+        }
+        double rotationAngle = magnitude / 2.0;
+        geometry_msgs::Quaternion quaternion;
+        quaternion.w = cos(rotationAngle);
+        quaternion.x = vector.x / magnitude * sin(rotationAngle);
+        quaternion.y = vector.y / magnitude * sin(rotationAngle);
+        quaternion.z = vector.z / magnitude * sin(rotationAngle);
+
+        return quaternion;
 }
 Vector GPSToECEF(GPS_point point, double h){
     double e_2 = 1 - pow(b, 2) / pow(a, 2);
@@ -23,7 +40,6 @@ Vector GPSToECEF(GPS_point point, double h){
     ecef_point.z = (n_fi * (1.0 - e_2) + h) * sin(degreeToRad(point.lat));
     return ecef_point;
 }
-
 Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, double h){
 	Vector pointsToConvert = GPSToECEF(gpsCoordinates, h);
     Vector enu_points;
@@ -37,35 +53,43 @@ Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, 
         {-sin(degreeToRad(ref_position.lat)) * cos(degreeToRad(ref_position.lon)), -sin(degreeToRad(ref_position.lat)) * sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lat))},
         {cos(degreeToRad(ref_position.lat)) * cos(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lat)) * sin(degreeToRad(ref_position.lon)), sin(degreeToRad(ref_position.lat))}
     };
-
 	enu_points.x = conversion_matrix[0][0] * diff.x + conversion_matrix[0][1] * diff.y + conversion_matrix[0][2] * diff.z;
     enu_points.y = conversion_matrix[1][0] * diff.x + conversion_matrix[1][1] * diff.y + conversion_matrix[1][2] * diff.z;
     enu_points.z = conversion_matrix[2][0] * diff.x + conversion_matrix[2][1] * diff.y + conversion_matrix[2][2] * diff.z;
     return enu_points;
 }
-
 void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, GPS_point position_r, double alt_r, ros::Publisher& pub ){
 	ROS_INFO("lat: %f, lon: %f, alt: %f", msg->latitude, msg->longitude, msg->altitude);
 	struct GPS_point point;
 	point.lat = msg->latitude;
 	point.lon = msg->longitude;
-	Vector result = GPSToENU(point, position_r, alt_r, msg->altitude);
+	Vector resultCurrent = GPSToENU(point, position_r, alt_r, msg->altitude);
+    Vector displacementVector;
 	nav_msgs::Odometry odom_msg;
     odom_msg.header.stamp = ros::Time::now();
     odom_msg.header.frame_id = "odom";
-    odom_msg.pose.pose.position.x = result.x;
-    odom_msg.pose.pose.position.y = result.y;
-    odom_msg.pose.pose.position.z = result.z;
-    
+    odom_msg.pose.pose.position.x = resultCurrent.x;
+    odom_msg.pose.pose.position.y = resultCurrent.y;
+    odom_msg.pose.pose.position.z = resultCurrent.z;
+    if(resultPrev.x == 0 && resultPrev.y == 0 && resultPrev.z == 0)
+        odom_msg.pose.pose.orientation = displacementToQuaternion(resultPrev);
+    else
+        displacementVector.x = resultCurrent.x - resultPrev.x;
+        displacementVector.x = resultCurrent.y - resultPrev.y;
+        displacementVector.x = resultCurrent.z - resultPrev.z;
+        odom_msg.pose.pose.orientation = displacementToQuaternion(displacementVector);
+    resultPrev = resultCurrent;
     pub.publish(odom_msg);
 }
-
 int main(int argc, char **argv){
 
 	ros::init(argc, argv, "gps_to_odom");
 	ros::NodeHandle n;
 	ros::Publisher gps_to_odom = n.advertise<nav_msgs::Odometry>("gps_odom", 100);
 	GPS_point position;
+    resultPrev.x = 0;
+    resultPrev.y = 0;
+    resultPrev.z = 0;
 	double alt_r;
 	n.getParam("/lat_r", position.lat);
 	n.getParam("/lon_r", position.lon);
