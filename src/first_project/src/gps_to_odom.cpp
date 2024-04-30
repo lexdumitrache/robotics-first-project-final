@@ -43,16 +43,12 @@ Vector GPSToECEF(GPS_point point, double h){
 }
 Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, double h){
 	Vector pointsToConvert = GPSToECEF(gpsCoordinates, h);
-    ROS_INFO("GPS: lat: %f, lon: %f, alt: %f", gpsCoordinates.lat, gpsCoordinates.lon, h);
-    ROS_INFO("current position: x: %f, y: %f, z: %f", pointsToConvert.x, pointsToConvert.y, pointsToConvert.z);
     Vector enu_points;
     Vector diff;
 	Vector ref = GPSToECEF(ref_position, alt_r);
     diff.x = pointsToConvert.x - ref.x;
     diff.y = pointsToConvert.y - ref.y;
     diff.z = pointsToConvert.z - ref.z;
-    ROS_INFO("GPS: lat: %f, lon: %f, alt: %f", ref_position.lat, ref_position.lon, alt_r);
-    ROS_INFO("relative position: x: %f, y: %f, z: %f", ref.x, ref.y, ref.z);
     double conversion_matrix[3][3] = {
         {-sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lon)), 0},
         {-sin(degreeToRad(ref_position.lat)) * cos(degreeToRad(ref_position.lon)), -sin(degreeToRad(ref_position.lat)) * sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lat))},
@@ -75,17 +71,25 @@ void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, GPS_point positio
     odom_msg.pose.pose.position.x = resultCurrent.x;
     odom_msg.pose.pose.position.y = resultCurrent.y;
     odom_msg.pose.pose.position.z = resultCurrent.z;
-    if(!(resultPrev.x == 0 && resultPrev.y == 0 && resultPrev.z == 0))
+    if(resultPrev.x == 0 && resultPrev.y == 0 && resultPrev.z == 0){
+        displacementVector.x = 0;
+        displacementVector.y = 0;
+        displacementVector.z = 0;
+        }
+    else{
         displacementVector.x = resultCurrent.x - resultPrev.x;
         displacementVector.y = resultCurrent.y - resultPrev.y;
         displacementVector.z = resultCurrent.z - resultPrev.z;
+    }
     double heading = atan2(displacementVector.y, displacementVector.x);
 
     tf::Quaternion q;
     q.setRPY(0,0,heading);
     geometry_msgs::Quaternion orientation;
     tf::quaternionTFToMsg(q, orientation);
+    ROS_INFO("Orientation: %f, %f, %f, %f", orientation.x, orientation.y, orientation.z, orientation.w);
     odom_msg.pose.pose.orientation = orientation;
+    resultPrev = resultCurrent;
     pub.publish(odom_msg);
 }
 int main(int argc, char **argv){
