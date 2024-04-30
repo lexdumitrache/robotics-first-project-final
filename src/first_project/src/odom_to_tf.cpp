@@ -2,18 +2,19 @@
 #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
 
-void odomCallback(const nav_msgs::Odometry::ConstPtr& msg, tf::TransformBroadcaster& broadcaster, const std::string& root_frame, const std::string& child_frame) {
-    geometry_msgs::TransformStamped odom_trans;
-    odom_trans.header.stamp = msg->header.stamp;
-    odom_trans.header.frame_id = root_frame;
-    odom_trans.child_frame_id = child_frame;
-    odom_trans.transform.translation.x = msg->pose.pose.position.x;
-    odom_trans.transform.translation.y = msg->pose.pose.position.y;
-    odom_trans.transform.translation.z = msg->pose.pose.position.z;
-    odom_trans.transform.rotation = msg->pose.pose.orientation;
-
-    // Send the transform
-    broadcaster.sendTransform(odom_trans);
+void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg, 
+                      std::string root_frame, 
+                      std::string child_frame) {
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
+    transform.setOrigin(tf::Vector3(msg->pose.pose.position.x, 
+                                    msg->pose.pose.position.y, 
+                                    msg->pose.pose.position.z));
+    transform.setRotation(tf::Quaternion(msg->pose.pose.orientation.x, 
+                                         msg->pose.pose.orientation.y, 
+                                         msg->pose.pose.orientation.z, 
+                                         msg->pose.pose.orientation.w));
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), root_frame, child_frame));
 }
 
 int main(int argc, char** argv) {
@@ -22,12 +23,11 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh_private("~");
 
     std::string root_frame, child_frame;
-    nh_private.param("root_frame", root_frame, std::string("world"));
-    nh_private.param("child_frame", child_frame, std::string("odom"));
-
-    tf::TransformBroadcaster broadcaster;
-    ros::Subscriber sub = nh.subscribe<nav_msgs::Odometry>("input_odom", 50, boost::bind(odomCallback, _1, boost::ref(broadcaster), root_frame, child_frame));
-
+    nh.getParam("/root_frame", root_frame);
+    nh_private.getParam("child_frame", child_frame);
+    ros::Subscriber sub = nh.subscribe<nav_msgs::Odometry>("input_odom", 10, 
+        std::bind(odometryCallback, std::placeholders::_1, root_frame, child_frame));
+    ROS_INFO("Root frame: %s, child frame: %s", root_frame.c_str(), child_frame.c_str());
     ros::spin();
     return 0;
 }
