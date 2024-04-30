@@ -17,21 +17,6 @@ struct GPS_point {
 double degreeToRad(double toConvert){
 	return toConvert * M_PI / 180;
 }
-// geometry_msgs::Quaternion displacementToQuaternion(Vector vector) {
-//         // Normalize displacement vector
-//         double magnitude = sqrt(pow(vector.x, 2) + pow(vector.y, 2) + pow(vector.z, 2));
-//         if (magnitude == 0) {
-//             return geometry_msgs::Quaternion();
-//         }
-//         double rotationAngle = magnitude / 2.0;
-//         geometry_msgs::Quaternion quaternion;
-//         quaternion.w = cos(rotationAngle);
-//         quaternion.x = vector.x / magnitude * sin(rotationAngle);
-//         quaternion.y = vector.y / magnitude * sin(rotationAngle);
-//         quaternion.z = vector.z / magnitude * sin(rotationAngle);
-
-//         return quaternion;
-// }
 Vector GPSToECEF(GPS_point point, double h){
     double e_2 = 1 - pow(b, 2) / pow(a, 2);
     double n_fi = a / sqrt(1 - e_2 * pow(sin(degreeToRad(point.lat)), 2));
@@ -87,7 +72,6 @@ void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, GPS_point positio
     q.setRPY(0,0,heading);
     geometry_msgs::Quaternion orientation;
     tf::quaternionTFToMsg(q, orientation);
-    ROS_INFO("Orientation: %f, %f, %f, %f", orientation.x, orientation.y, orientation.z, orientation.w);
     odom_msg.pose.pose.orientation = orientation;
     resultPrev = resultCurrent;
     pub.publish(odom_msg);
@@ -101,9 +85,9 @@ int main(int argc, char **argv){
     resultPrev.y = 0;
     resultPrev.z = 0;
 	double alt_r, lon_r, lat_r;
-	n.getParam("gps_to_odom/lat_r", center.lat);
-	n.getParam("gps_to_odom/lon_r", center.lon);
-	n.getParam("gps_to_odom/alt_r", alt_r);
+	n.getParam("/lat_r", center.lat);
+	n.getParam("/lon_r", center.lon);
+	n.getParam("/alt_r", alt_r);
     ROS_INFO("RELATIVE POSITION: lat: %f, lon: %f, alt: %f", center.lat, center.lon, alt_r);
 	ros::Rate loop_rate(10);
 	ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 100, std::bind(odomCallback, std::placeholders::_1, center, alt_r, gps_to_odom));
