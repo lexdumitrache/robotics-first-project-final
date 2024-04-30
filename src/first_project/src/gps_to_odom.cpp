@@ -42,12 +42,16 @@ Vector GPSToECEF(GPS_point point, double h){
 }
 Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, double h){
 	Vector pointsToConvert = GPSToECEF(gpsCoordinates, h);
+    ROS_INFO("GPS: lat: %f, lon: %f, alt: %f", gpsCoordinates.lat, gpsCoordinates.lon, h);
+    ROS_INFO("current position: x: %f, y: %f, z: %f", pointsToConvert.x, pointsToConvert.y, pointsToConvert.z);
     Vector enu_points;
     Vector diff;
 	Vector ref = GPSToECEF(ref_position, alt_r);
     diff.x = pointsToConvert.x - ref.x;
     diff.y = pointsToConvert.y - ref.y;
     diff.z = pointsToConvert.z - ref.z;
+    ROS_INFO("GPS: lat: %f, lon: %f, alt: %f", ref_position.lat, ref_position.lon, alt_r);
+    ROS_INFO("relative position: x: %f, y: %f, z: %f", ref.x, ref.y, ref.z);
     double conversion_matrix[3][3] = {
         {-sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lon)), 0},
         {-sin(degreeToRad(ref_position.lat)) * cos(degreeToRad(ref_position.lon)), -sin(degreeToRad(ref_position.lat)) * sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lat))},
@@ -59,7 +63,6 @@ Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, 
     return enu_points;
 }
 void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, GPS_point position_r, double alt_r, ros::Publisher& pub ){
-	ROS_INFO("lat: %f, lon: %f, alt: %f", msg->latitude, msg->longitude, msg->altitude);
 	struct GPS_point point;
 	point.lat = msg->latitude;
 	point.lon = msg->longitude;
@@ -86,17 +89,17 @@ int main(int argc, char **argv){
 	ros::init(argc, argv, "gps_to_odom");
 	ros::NodeHandle n;
 	ros::Publisher gps_to_odom = n.advertise<nav_msgs::Odometry>("gps_odom", 100);
-	GPS_point position;
+	GPS_point center;
     resultPrev.x = 0;
     resultPrev.y = 0;
     resultPrev.z = 0;
-	double alt_r;
-	n.getParam("/lat_r", position.lat);
-	n.getParam("/lon_r", position.lon);
-	n.getParam("/alt_r", alt_r);
-
+	double alt_r, lon_r, lat_r;
+	n.getParam("lat_r", center.lat);
+	n.getParam("lon_r", center.lon);
+	n.getParam("alt_r", alt_r);
+    ROS_INFO("RELATIVE POSITION: lat: %f, lon: %f, alt: %f", center.lat, center.lon, alt_r);
 	ros::Rate loop_rate(10);
-	ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 100, std::bind(odomCallback, std::placeholders::_1, position, alt_r, gps_to_odom));
+	ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 100, std::bind(odomCallback, std::placeholders::_1, center, alt_r, gps_to_odom));
 
   	while (ros::ok()){
     		ros::spinOnce();
