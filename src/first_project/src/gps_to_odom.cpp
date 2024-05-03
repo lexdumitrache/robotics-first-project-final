@@ -17,6 +17,14 @@ struct GPS_point {
 double degreeToRad(double toConvert){
 	return toConvert * M_PI / 180;
 }
+Vector rotateVector(Vector v, double degrees) {
+    double radians = degreeToRad(degrees);
+    Vector rotated;
+    rotated.x = v.x * cos(radians) - v.y * sin(radians);
+    rotated.y = v.x * sin(radians) + v.y * cos(radians);
+    rotated.z = v.z;  // Z-axis is unaffected by rotation in the XY-plane
+    return rotated;
+}
 Vector GPSToECEF(GPS_point point, double h){
     double e_2 = 1 - pow(b, 2) / pow(a, 2);
     double n_fi = a / sqrt(1 - e_2 * pow(sin(degreeToRad(point.lat)), 2));
@@ -42,6 +50,7 @@ Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, 
 	enu_points.x = conversion_matrix[0][0] * diff.x + conversion_matrix[0][1] * diff.y + conversion_matrix[0][2] * diff.z;
     enu_points.y = conversion_matrix[1][0] * diff.x + conversion_matrix[1][1] * diff.y + conversion_matrix[1][2] * diff.z;
     enu_points.z = conversion_matrix[2][0] * diff.x + conversion_matrix[2][1] * diff.y + conversion_matrix[2][2] * diff.z;
+	enu_points = rotateVector(enu_points, 130.0);
     return enu_points;
 }
 void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, GPS_point position_r, double alt_r, ros::Publisher& pub ){
