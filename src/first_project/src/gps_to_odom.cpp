@@ -3,107 +3,87 @@
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Quaternion.h>
 #include <sensor_msgs/NavSatFix.h>
+#include <sensor_msgs/NavSatStatus.h>
+#include <first_project/gps_math.h>
 #include <cmath>
-#include <sstream>
-const double a = 6378137; 
-const double b = 6356752;
-struct Vector { 
-    double x, y, z; 
+
+struct Config {
+    GPS_point ref;
+    double alt_r;
+    double yaw_offset;   // degrees, rotation from ENU to the wheel odometry frame
+    double min_move;     // metres travelled before the heading is updated
+    std::string frame_id;
 };
-Vector resultPrev;
-struct GPS_point { 
-    double lat, lon; 
-};
-double degreeToRad(double toConvert){
-	return toConvert * M_PI / 180;
-}
-Vector rotateVector(Vector v, double degrees) {
-    double radians = degreeToRad(degrees);
-    Vector rotated;
-    rotated.x = v.x * cos(radians) - v.y * sin(radians);
-    rotated.y = v.x * sin(radians) + v.y * cos(radians);
-    rotated.z = v.z;  // Z-axis is unaffected by rotation in the XY-plane
-    return rotated;
-}
-Vector GPSToECEF(GPS_point point, double h){
-    double e_2 = 1 - pow(b, 2) / pow(a, 2);
-    double n_fi = a / sqrt(1 - e_2 * pow(sin(degreeToRad(point.lat)), 2));
-    struct Vector ecef_point;
-    ecef_point.x = (n_fi + h) * cos(degreeToRad(point.lat)) * cos(degreeToRad(point.lon));
-    ecef_point.y = (n_fi + h) * cos(degreeToRad(point.lat)) * sin(degreeToRad(point.lon));
-    ecef_point.z = (n_fi * (1.0 - e_2) + h) * sin(degreeToRad(point.lat));
-    return ecef_point;
-}
-Vector GPSToENU(GPS_point gpsCoordinates, GPS_point ref_position, double alt_r, double h){
-	Vector pointsToConvert = GPSToECEF(gpsCoordinates, h);
-    Vector enu_points;
-    Vector diff;
-	Vector ref = GPSToECEF(ref_position, alt_r);
-    diff.x = pointsToConvert.x - ref.x;
-    diff.y = pointsToConvert.y - ref.y;
-    diff.z = pointsToConvert.z - ref.z;
-    double conversion_matrix[3][3] = {
-        {-sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lon)), 0},
-        {-sin(degreeToRad(ref_position.lat)) * cos(degreeToRad(ref_position.lon)), -sin(degreeToRad(ref_position.lat)) * sin(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lat))},
-        {cos(degreeToRad(ref_position.lat)) * cos(degreeToRad(ref_position.lon)), cos(degreeToRad(ref_position.lat)) * sin(degreeToRad(ref_position.lon)), sin(degreeToRad(ref_position.lat))}
-    };
-	enu_points.x = conversion_matrix[0][0] * diff.x + conversion_matrix[0][1] * diff.y + conversion_matrix[0][2] * diff.z;
-    enu_points.y = conversion_matrix[1][0] * diff.x + conversion_matrix[1][1] * diff.y + conversion_matrix[1][2] * diff.z;
-    enu_points.z = conversion_matrix[2][0] * diff.x + conversion_matrix[2][1] * diff.y + conversion_matrix[2][2] * diff.z;
-	enu_points = rotateVector(enu_points, 130.0);
-    return enu_points;
-}
-void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, GPS_point position_r, double alt_r, ros::Publisher& pub ){
-	struct GPS_point point;
-	point.lat = msg->latitude;
-	point.lon = msg->longitude;
-	Vector resultCurrent = GPSToENU(point, position_r, alt_r, msg->altitude);
-    Vector displacementVector;
-	nav_msgs::Odometry odom_msg;
+
+bool initialized = false;
+Vector resultPrev;      // last position the heading was computed from
+double heading = 0;
+
+void odomCallback(const sensor_msgs::NavSatFix::ConstPtr& msg, const Config& cfg, ros::Publisher& pub){
+    if (msg->status.status < sensor_msgs::NavSatStatus::STATUS_FIX ||
+        !std::isfinite(msg->latitude) || !std::isfinite(msg->longitude) || !std::isfinite(msg->altitude)) {
+        ROS_WARN_THROTTLE(5, "Dropping invalid GPS fix (status %d)", msg->status.status);
+        return;
+    }
+    GPS_point point;
+    point.lat = msg->latitude;
+    point.lon = msg->longitude;
+    Vector resultCurrent = GPSToENU(point, cfg.ref, cfg.alt_r, msg->altitude, cfg.yaw_offset);
+
+    if (!initialized) {
+        resultPrev = resultCurrent;
+        initialized = true;
+    } else {
+        double dx = resultCurrent.x - resultPrev.x;
+        double dy = resultCurrent.y - resultPrev.y;
+        // Only trust the direction of travel once the robot has moved further than GPS noise;
+        // while stationary the previous heading is kept.
+        // ponytail: assumes forward motion; reversing flips the heading until an IMU/encoder yaw is fused.
+        if (std::hypot(dx, dy) >= cfg.min_move) {
+            heading = atan2(dy, dx);
+            resultPrev = resultCurrent;
+        }
+    }
+
+    nav_msgs::Odometry odom_msg;
     odom_msg.header.stamp = ros::Time::now();
-    odom_msg.header.frame_id = "odom";
+    odom_msg.header.frame_id = cfg.frame_id;
+    odom_msg.child_frame_id = "gps_odom";
     odom_msg.pose.pose.position.x = resultCurrent.x;
     odom_msg.pose.pose.position.y = resultCurrent.y;
     odom_msg.pose.pose.position.z = resultCurrent.z;
-    if(resultPrev.x == 0 && resultPrev.y == 0 && resultPrev.z == 0){
-        displacementVector.x = 0;
-        displacementVector.y = 0;
-        displacementVector.z = 0;
-        }
-    else{
-        displacementVector.x = resultCurrent.x - resultPrev.x;
-        displacementVector.y = resultCurrent.y - resultPrev.y;
-        displacementVector.z = resultCurrent.z - resultPrev.z;
-    }
-    double heading = atan2(displacementVector.y, displacementVector.x);
-
     tf::Quaternion q;
-    q.setRPY(0,0,heading);
-    geometry_msgs::Quaternion orientation;
-    tf::quaternionTFToMsg(q, orientation);
-    odom_msg.pose.pose.orientation = orientation;
-    resultPrev = resultCurrent;
+    q.setRPY(0, 0, heading);
+    tf::quaternionTFToMsg(q, odom_msg.pose.pose.orientation);
     pub.publish(odom_msg);
 }
-int main(int argc, char **argv){
-	ros::init(argc, argv, "gps_to_odom");
-	ros::NodeHandle n;
-	ros::Publisher gps_to_odom = n.advertise<nav_msgs::Odometry>("gps_odom", 100);
-	GPS_point center;
-    resultPrev.x = 0;
-    resultPrev.y = 0;
-    resultPrev.z = 0;
-	double alt_r, lon_r, lat_r;
-	n.getParam("/lat_r", center.lat);
-	n.getParam("/lon_r", center.lon);
-	n.getParam("/alt_r", alt_r);
-    ROS_INFO("RELATIVE POSITION: lat: %f, lon: %f, alt: %f", center.lat, center.lon, alt_r);
-	ros::Rate loop_rate(10);
-	ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 100, std::bind(odomCallback, std::placeholders::_1, center, alt_r, gps_to_odom));
 
-  	while (ros::ok()){
-    		ros::spinOnce();
-    		loop_rate.sleep();
-  	}
-  	return 0;
+int main(int argc, char **argv){
+    ros::init(argc, argv, "gps_to_odom");
+    ros::NodeHandle n;
+    ros::NodeHandle pn("~");
+    ros::Publisher gps_to_odom = n.advertise<nav_msgs::Odometry>("gps_odom", 100);
+
+    // Private params win; global ones are kept as a fallback for launch.launch.
+    auto param = [&](const std::string& name, double& out, double def) {
+        if (!pn.getParam(name, out) && !n.getParam(name, out)) {
+            out = def;
+            return false;
+        }
+        return true;
+    };
+    Config cfg;
+    if (!param("lat_r", cfg.ref.lat, 0) | !param("lon_r", cfg.ref.lon, 0) | !param("alt_r", cfg.alt_r, 0)) {
+        ROS_FATAL("Reference position lat_r/lon_r/alt_r must be set");
+        return 1;
+    }
+    param("yaw_offset", cfg.yaw_offset, 130.0);
+    param("min_move", cfg.min_move, 0.5);
+    if (!pn.getParam("root_frame", cfg.frame_id) && !n.getParam("root_frame", cfg.frame_id)) cfg.frame_id = "world";
+
+    ROS_INFO("Reference: lat %f, lon %f, alt %f, yaw offset %f deg", cfg.ref.lat, cfg.ref.lon, cfg.alt_r, cfg.yaw_offset);
+    ros::Subscriber sub = n.subscribe<sensor_msgs::NavSatFix>("fix", 100,
+        std::bind(odomCallback, std::placeholders::_1, cfg, gps_to_odom));
+    ros::spin();
+    return 0;
 }

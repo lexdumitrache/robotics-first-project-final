@@ -3,5 +3,7 @@
         <param name="lat_r" value="45.477669" />
         <param name="lon_r" value="9.226740" />
         <param name="alt_r" value="169.041000" />
+        <param name="yaw_offset" value="130.0" />
+        <param name="root_frame" value="world" />
     </node>
 </launch>

@@ -1,21 +1,23 @@
 <launch>
+    <!-- Reference point for the ENU conversion and rotation aligning ENU with the wheel odometry frame -->
     <param name="lat_r" value="45.477669" />
     <param name="lon_r" value="9.226740" />
     <param name="alt_r" value="169.041000" />
+    <param name="yaw_offset" value="130.0" />
+    <!-- TF tree: world -> wheel_odom (encoders), world -> gps_odom (GPS) -->
     <param name="root_frame" value="world"/>
     <node pkg="first_project" name="gps_to_odom" type="gps_to_odom" output="screen"/>
     <!-- TF from Encoder Odometry -->
     <node name="encoder_to_tf" pkg="first_project" type="odom_to_tf" output="screen">
         <param name="child_frame" value="wheel_odom"/>
-        <remap from="input_odom" to="/gps_odom"/>
+        <remap from="input_odom" to="/odom"/>
     </node>
     <!-- TF from GPS Odometry -->
     <node name="gps_to_tf" pkg="first_project" type="odom_to_tf" output="screen">
         <param name="child_frame" value="gps_odom"/>
-        <remap from="input_odom" to="/odom"/>
+        <remap from="input_odom" to="/gps_odom"/>
     </node>
-    <node name="lidar_remap" pkg="first_project" type="lidar_remap" output="screen">
-        <remap from="os_cloud_node/points" to="pointcloud_remapped"/>
-    </node>
+    <!-- Reads /os_cloud_node/points, republishes on /pointcloud_remapped in the frame chosen via dynamic_reconfigure -->
+    <node name="lidar_remap" pkg="first_project" type="lidar_remap" output="screen"/>
     <node pkg="rviz" type="rviz" name="rviz"/>
 </launch>
