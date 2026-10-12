@@ -55,3 +55,9 @@ docker run -it --rm -v "$PWD/../src:/home/ros/catkin_ws/src" robotics:stable
 ```
 
 `build-docker-image.ps1` / `run-ros.ps1` / `run-vnc.ps1` do the same on Windows (with a noVNC display).
+
+## Academic project and licensing
+
+This repository contains coursework developed for the Robotics course at Politecnico di Milano and is shared for educational and portfolio purposes, subject to applicable course and contributor permissions.
+
+Original contributors should be acknowledged, and third-party components remain subject to their respective licenses. No open-source license is currently granted for the original project code; permission is required before copying, modifying, or redistributing it.
