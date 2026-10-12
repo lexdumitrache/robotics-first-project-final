@@ -2,15 +2,17 @@
 FROM ros:noetic-perception
 
 # Arguments to be passed at build time
-ARG USER_ID
-ARG GROUP_ID
-ARG USER_NAME
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+ARG USER_NAME=ros
 
 ENV DEBIAN_FRONTEND noninteractive
 
 # Install required packages
 RUN apt-get update && \
-    apt-get install -y nano vim tmux gedit ros-noetic-rqt*  && \
+    apt-get install -y nano vim tmux gedit net-tools iproute2 \
+        ros-noetic-rqt-common-plugins ros-noetic-rqt-reconfigure ros-noetic-rviz \
+        ros-noetic-plotjuggler-ros ros-noetic-foxglove-bridge ros-noetic-turtlesim && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a group and user
@@ -21,10 +23,6 @@ RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
 RUN mkdir -p /home/${USER_NAME}/catkin_ws/src && \
     chown -R ${USER_NAME}:${GROUP_ID} /home/${USER_NAME}/catkin_ws && \
     echo "source /home/${USER_NAME}/catkin_ws/devel/setup.bash" >> /home/${USER_NAME}/.bashrc
-    
-#forgot a few stuff    
-RUN apt-get update && \
-    apt-get install -y net-tools iproute2 ros-noetic-plotjuggler* ros-noetic-foxglove-bridge ros-noetic-turtlesim
     
 # Switch to the new user
 USER ${USER_NAME}

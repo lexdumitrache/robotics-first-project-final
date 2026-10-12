@@ -14,7 +14,9 @@ void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg,
                                          msg->pose.pose.orientation.y, 
                                          msg->pose.pose.orientation.z, 
                                          msg->pose.pose.orientation.w));
-    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), root_frame, child_frame));
+    // Without a configured root frame, use the frame the odometry is expressed in.
+    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(),
+                                          root_frame.empty() ? msg->header.frame_id : root_frame, child_frame));
 }
 
 int main(int argc, char** argv) {
@@ -23,8 +25,11 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh_private("~");
 
     std::string root_frame, child_frame;
-    nh.getParam("/root_frame", root_frame);
-    nh_private.getParam("child_frame", child_frame);
+    if (!nh_private.getParam("root_frame", root_frame)) nh.getParam("/root_frame", root_frame);
+    if (!nh_private.getParam("child_frame", child_frame)) {
+        ROS_FATAL("~child_frame must be set");
+        return 1;
+    }
     ros::Subscriber sub = nh.subscribe<nav_msgs::Odometry>("input_odom", 10, 
         std::bind(odometryCallback, std::placeholders::_1, root_frame, child_frame));
     ROS_INFO("Root frame: %s, child frame: %s", root_frame.c_str(), child_frame.c_str());
